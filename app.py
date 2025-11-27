@@ -1,5 +1,3 @@
-
-
 # FamilyConnect Pro - Multi-Family Edition with Admin Panel (Streamlit Version)
 # Install: pip install streamlit pillow
 
@@ -851,7 +849,7 @@ def main():
         
         if st.button("🚪 Logout"):
             logout()
-            st.experimental_rerun()
+            st.rerun()
     
     # User Login/Register
     elif not st.session_state.logged_in:
@@ -865,7 +863,7 @@ def main():
                     success, message = admin_login(admin_username, admin_password)
                     if success:
                         st.success(message)
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error(message)
         
@@ -883,7 +881,7 @@ def main():
                     success, message = login(login_family_code, login_username, login_password)
                     if success:
                         st.success(message)
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error(message)
             
@@ -907,7 +905,7 @@ def main():
                                                reg_avatar, reg_status, reg_birthday, reg_bio, reg_email)
                     if success:
                         st.success(message)
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error(message)
     
@@ -919,7 +917,7 @@ def main():
         
         if st.sidebar.button("🚪 Logout"):
             logout()
-            st.experimental_rerun()
+            st.rerun()
         
         # Main content
         page = st.sidebar.selectbox("Navigation", [
@@ -944,7 +942,7 @@ def main():
                         success, message = post_announcement(announcement_input, announcement_priority)
                         if success:
                             st.success(message)
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error(message)
         
@@ -957,7 +955,7 @@ def main():
                 if st.form_submit_button("📤 Send"):
                     success, message = send_message(message_input)
                     if success:
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error(message)
         
@@ -978,7 +976,7 @@ def main():
                         success, message = add_event(event_title, event_date, event_time, event_location)
                         if success:
                             st.success(message)
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error(message)
         
@@ -1001,7 +999,7 @@ def main():
                         success, message = add_task(task_input, task_assigned, task_due)
                         if success:
                             st.success(message)
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error(message)
         
@@ -1017,7 +1015,7 @@ def main():
                         success, message = upload_photo(photo_upload, photo_caption)
                         if success:
                             st.success(message)
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error(message)
         
@@ -1034,7 +1032,7 @@ def main():
                         success, message = create_poll(poll_question, poll_options)
                         if success:
                             st.success(message)
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error(message)
         
@@ -1049,7 +1047,7 @@ def main():
                         success, message = post_story(story_content)
                         if success:
                             st.success(message)
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error(message)
         
@@ -1064,7 +1062,7 @@ def main():
                         success, message = update_profile_picture(profile_pic_upload)
                         if success:
                             st.success(message)
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error(message)
             
