@@ -1,15 +1,16 @@
-"""
-FamilyConnect Pro - Multi-Family Edition with Admin Panel
-Install: pip install gradio pillow
-Run in Google Colab or local environment
-"""
 
-import gradio as gr
+
+# FamilyConnect Pro - Multi-Family Edition with Admin Panel (Streamlit Version)
+# Install: pip install streamlit pillow
+
+import streamlit as st
 from datetime import datetime, timedelta
 import random
 import string
 import base64
 from io import BytesIO
+from PIL import Image
+import time
 
 # In-memory storage
 class FamilyConnectDB:
@@ -79,7 +80,12 @@ class FamilyConnectDB:
             "stories": []
         }
 
-db = FamilyConnectDB()
+# Initialize database in session state
+if 'db' not in st.session_state:
+    st.session_state.db = FamilyConnectDB()
+
+# Get database from session state
+db = st.session_state.db
 
 ROLE_COLORS = {
     "Father": "#3b82f6", "Mother": "#ec4899", "Son": "#10b981",
@@ -128,17 +134,13 @@ def get_user_avatar_html(username):
 # Admin Panel Functions
 def admin_login(username, password):
     if username in db.admin_users and db.admin_users[username] == password:
-        return (
-            gr.update(visible=False),
-            gr.update(visible=True),
-            "✅ Admin access granted!",
-            get_admin_dashboard_html()
-        )
-    return gr.update(), gr.update(), "❌ Invalid admin credentials!", ""
+        st.session_state.admin_logged_in = True
+        return True, "✅ Admin access granted!"
+    return False, "❌ Invalid admin credentials!"
 
 def create_new_family(family_name):
     if not family_name.strip():
-        return "❌ Family name required!", get_admin_dashboard_html()
+        return False, "❌ Family name required!"
 
     code = generate_family_code()
     db.families[code] = {
@@ -155,14 +157,14 @@ def create_new_family(family_name):
         "stories": []
     }
 
-    return f"✅ Family '{family_name}' created! Code: {code}", get_admin_dashboard_html()
+    return True, f"✅ Family '{family_name}' created! Code: {code}"
 
 def delete_family(family_code):
     if family_code in db.families:
         family_name = db.families[family_code]['name']
         del db.families[family_code]
-        return f"✅ Family '{family_name}' deleted!", get_admin_dashboard_html()
-    return "❌ Family code not found!", get_admin_dashboard_html()
+        return True, f"✅ Family '{family_name}' deleted!"
+    return False, "❌ Family code not found!"
 
 def get_admin_dashboard_html():
     html = f"""
@@ -372,7 +374,7 @@ def get_messages_html():
     html += "</div>"
     return html
 
-# Continue with remaining HTML functions (events, tasks, family members)...
+# Events HTML
 def get_events_html():
     family = get_current_family_data()
     if not family or not family['events']:
@@ -420,6 +422,7 @@ def get_events_html():
     html += "</div>"
     return html
 
+# Tasks HTML
 def get_tasks_html():
     family = get_current_family_data()
     if not family or not family['tasks']:
@@ -455,6 +458,7 @@ def get_tasks_html():
     html += "</div>"
     return html
 
+# Family Members HTML
 def get_family_members_html():
     family = get_current_family_data()
     if not family:
@@ -592,33 +596,26 @@ def get_stories_html():
 # Authentication
 def login(family_code, username, password):
     if family_code not in db.families:
-        return (gr.update(visible=True), gr.update(visible=False),
-                "❌ Invalid family code!", "", "", "", "", "", "", "", "", "")
+        return False, "❌ Invalid family code!"
 
     family = db.families[family_code]
     if username in family['users'] and family['users'][username]['password'] == password:
         db.current_user = username
         db.current_family = family_code
-        return (
-            gr.update(visible=False), gr.update(visible=True),
-            f"✅ Welcome back, {family['users'][username]['name']}!",
-            get_dashboard_html(), get_announcements_html(), get_messages_html(),
-            get_events_html(), get_tasks_html(), get_family_members_html(),
-            get_photos_html(), get_polls_html(), get_stories_html()
-        )
-    return (gr.update(visible=True), gr.update(visible=False),
-            "❌ Invalid credentials!", "", "", "", "", "", "", "", "", "")
+        st.session_state.logged_in = True
+        return True, f"✅ Welcome back, {family['users'][username]['name']}!"
+    return False, "❌ Invalid credentials!"
 
 def register(family_code, name, username, password, role, avatar, status, birthday, bio, email):
     if family_code not in db.families:
-        return "❌ Invalid family code!", gr.update(), gr.update(), "", "", "", "", "", "", "", "", ""
+        return False, "❌ Invalid family code!"
 
     if not all([name, username, password, role]):
-        return "❌ Fill all required fields!", gr.update(), gr.update(), "", "", "", "", "", "", "", "", ""
+        return False, "❌ Fill all required fields!"
 
     family = db.families[family_code]
     if username in family['users']:
-        return "❌ Username exists in this family!", gr.update(), gr.update(), "", "", "", "", "", "", "", "", ""
+        return False, "❌ Username exists in this family!"
 
     family['users'][username] = {
         "name": name, "avatar": avatar or "👤", "status": status or "Available",
@@ -627,31 +624,26 @@ def register(family_code, name, username, password, role, avatar, status, birthd
     }
     db.current_user = username
     db.current_family = family_code
-    return (f"✅ Welcome, {name}!", gr.update(visible=False), gr.update(visible=True),
-            get_dashboard_html(), get_announcements_html(), get_messages_html(),
-            get_events_html(), get_tasks_html(), get_family_members_html(),
-            get_photos_html(), get_polls_html(), get_stories_html())
+    st.session_state.logged_in = True
+    return True, f"✅ Welcome, {name}!"
 
 def logout():
     db.current_user = None
     db.current_family = None
-    return (gr.update(visible=True), gr.update(visible=False), "", "", "", "", "", "", "", "", "", "")
+    st.session_state.logged_in = False
+    st.session_state.admin_logged_in = False
 
 # Profile picture update
 def update_profile_picture(image):
     if not db.current_user or not db.current_family:
-        return "❌ You must be logged in", get_family_members_html()
+        return False, "❌ You must be logged in"
 
     if image is None:
-        return "❌ Please upload an image", get_family_members_html()
+        return False, "❌ Please upload an image"
 
     family = get_current_family_data()
     if family:
         # Convert image to base64
-        import base64
-        from io import BytesIO
-        from PIL import Image
-
         # Resize and convert image
         img = Image.open(image)
         img = img.resize((200, 200))
@@ -661,18 +653,18 @@ def update_profile_picture(image):
 
         family['users'][db.current_user]['profile_pic'] = f"data:image/png;base64,{img_str}"
 
-        return "✅ Profile picture updated!", get_family_members_html()
+        return True, "✅ Profile picture updated!"
 
-    return "❌ Error updating profile picture", get_family_members_html()
+    return False, "❌ Error updating profile picture"
 
 # Main functions
 def post_announcement(content, priority):
     if not db.current_user or not content.strip():
-        return "❌ Cannot post empty announcement!", get_announcements_html()
+        return False, "❌ Cannot post empty announcement!"
 
     family = get_current_family_data()
     if not family:
-        return "❌ No family selected!", get_announcements_html()
+        return False, "❌ No family selected!"
 
     user = family['users'][db.current_user]
     family['announcements'].append({
@@ -681,15 +673,15 @@ def post_announcement(content, priority):
         "timestamp": datetime.now().isoformat(), "type": "text",
         "reactions": {}, "priority": priority, "comments": []
     })
-    return "✅ Announcement posted!", get_announcements_html()
+    return True, "✅ Announcement posted!"
 
 def send_message(content):
     if not db.current_user or not content.strip():
-        return "❌ Cannot send empty message!", get_messages_html()
+        return False, "❌ Cannot send empty message!"
 
     family = get_current_family_data()
     if not family:
-        return "❌ No family selected!", get_messages_html()
+        return False, "❌ No family selected!"
 
     user = family['users'][db.current_user]
     family['messages'].append({
@@ -697,15 +689,15 @@ def send_message(content):
         "content": content, "timestamp": datetime.now().isoformat(),
         "reactions": {}
     })
-    return "", get_messages_html()
+    return True, ""
 
 def add_event(title, date, time, location):
     if not db.current_user or not all([title, date, time]):
-        return "❌ Fill all fields!", get_events_html()
+        return False, "❌ Fill all fields!"
 
     family = get_current_family_data()
     if not family:
-        return "❌ No family selected!", get_events_html()
+        return False, "❌ No family selected!"
 
     try:
         if '/' in date:
@@ -714,7 +706,7 @@ def add_event(title, date, time, location):
             event_date = datetime.strptime(date, '%Y-%m-%d')
         iso_date = event_date.isoformat().split('T')[0]
     except ValueError:
-        return "❌ Invalid date format! Use YYYY-MM-DD or DD/Month/YY", get_events_html()
+        return False, "❌ Invalid date format! Use YYYY-MM-DD or DD/Month/YY"
 
     family['events'].append({
         "id": len(family['events']) + 1, "title": title, "date": iso_date,
@@ -722,33 +714,30 @@ def add_event(title, date, time, location):
         "creator": family['users'][db.current_user]['name'],
         "attendees": []
     })
-    return "✅ Event added!", get_events_html()
+    return True, "✅ Event added!"
 
 def add_task(task, assigned_to, due_date):
     if not db.current_user or not all([task, assigned_to, due_date]):
-        return "❌ Fill all fields!", get_tasks_html()
+        return False, "❌ Fill all fields!"
 
     family = get_current_family_data()
     if not family:
-        return "❌ No family selected!", get_tasks_html()
+        return False, "❌ No family selected!"
 
     family['tasks'].append({
         "id": len(family['tasks']) + 1, "task": task,
         "assigned_to": assigned_to, "status": "pending", "due": due_date,
         "created_by": family['users'][db.current_user]['name']
     })
-    return "✅ Task added!", get_tasks_html()
+    return True, "✅ Task added!"
 
 def upload_photo(image, caption):
     if not db.current_user or not image:
-        return "❌ Please upload an image!", get_photos_html()
+        return False, "❌ Please upload an image!"
 
     family = get_current_family_data()
     if not family:
-        return "❌ No family selected!", get_photos_html()
-
-    import base64
-    from PIL import Image
+        return False, "❌ No family selected!"
 
     img = Image.open(image)
     img.thumbnail((800, 800))
@@ -764,19 +753,19 @@ def upload_photo(image, caption):
         "timestamp": datetime.now().isoformat()
     })
 
-    return "✅ Photo uploaded!", get_photos_html()
+    return True, "✅ Photo uploaded!"
 
 def create_poll(question, options):
     if not db.current_user or not question.strip():
-        return "❌ Enter a question!", get_polls_html()
+        return False, "❌ Enter a question!"
 
     family = get_current_family_data()
     if not family:
-        return "❌ No family selected!", get_polls_html()
+        return False, "❌ No family selected!"
 
     option_list = [opt.strip() for opt in options.split('\n') if opt.strip()]
     if len(option_list) < 2:
-        return "❌ Need at least 2 options!", get_polls_html()
+        return False, "❌ Need at least 2 options!"
 
     family['polls'].append({
         "id": len(family['polls']) + 1,
@@ -786,15 +775,15 @@ def create_poll(question, options):
         "timestamp": datetime.now().isoformat()
     })
 
-    return "✅ Poll created!", get_polls_html()
+    return True, "✅ Poll created!"
 
 def post_story(content):
     if not db.current_user or not content.strip():
-        return "❌ Story cannot be empty!", get_stories_html()
+        return False, "❌ Story cannot be empty!"
 
     family = get_current_family_data()
     if not family:
-        return "❌ No family selected!", get_stories_html()
+        return False, "❌ No family selected!"
 
     user = family['users'][db.current_user]
     family['stories'].append({
@@ -805,297 +794,299 @@ def post_story(content):
         "timestamp": datetime.now().isoformat()
     })
 
-    return "✅ Story posted!", get_stories_html()
+    return True, "✅ Story posted!"
 
-# Build Gradio Interface
-with gr.Blocks(css="""
-    .gradio-container { max-width: 1600px !important; }
-    .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white; padding: 40px; border-radius: 20px; margin-bottom: 30px;
-        text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
-    .gradio-button-primary {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        border: none !important; font-weight: 600 !important;
-    }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-""", theme=gr.themes.Soft()) as app:
+# Main app
+def main():
+    # Initialize session state
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+    if 'admin_logged_in' not in st.session_state:
+        st.session_state.admin_logged_in = False
 
-    gr.HTML("""<div class="main-header">
+    # Custom CSS
+    st.markdown("""
+    <style>
+        .main-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 40px; border-radius: 20px; margin-bottom: 30px;
+            text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Header
+    st.markdown("""
+    <div class="main-header">
         <h1 style='font-size: 48px; margin-bottom: 10px; font-weight: bold;'>👨‍👩‍👧‍👦 FamilyConnect Pro</h1>
         <p style='font-size: 20px; opacity: 0.95;'>Multi-Family Communication Platform</p>
-    </div>""")
+    </div>
+    """, unsafe_allow_html=True)
 
     # Admin Panel
-    with gr.Column(visible=True) as admin_section:
-        gr.Markdown("## 👑 Admin Panel")
-        with gr.Row():
-            admin_username = gr.Textbox(label="Admin Username", placeholder="admin")
-            admin_password = gr.Textbox(label="Admin Password", type="password")
-        admin_login_btn = gr.Button("🔐 Admin Login", variant="primary", size="lg")
-        admin_status = gr.Markdown("")
-        gr.Markdown("---")
-        gr.Markdown("### 👥 User Login")
-        gr.Markdown("If you're a family member, click below to access your family dashboard")
-        user_login_btn = gr.Button("👤 Go to Family Login", variant="secondary", size="lg")
-
-    # Admin Dashboard
-    with gr.Column(visible=False) as admin_dashboard:
-        admin_display = gr.HTML()
-        gr.Markdown("### ➕ Create New Family")
-        with gr.Row():
-            new_family_name = gr.Textbox(label="Family Name", placeholder="Enter family name")
-            create_family_btn = gr.Button("Create Family", variant="primary")
-        create_status = gr.Markdown("")
-
-        gr.Markdown("### 🗑️ Delete Family")
-        with gr.Row():
-            delete_family_code = gr.Textbox(label="Family Code", placeholder="Enter code to delete")
-            delete_family_btn = gr.Button("Delete Family", variant="stop")
-        delete_status = gr.Markdown("")
-
-        admin_logout_btn = gr.Button("🚪 Logout", variant="secondary")
-
-    # Login Section
-    with gr.Column(visible=False) as login_section:
-        gr.Markdown("## 🔐 Family Login or Register")
-        with gr.Tab("Login"):
-            login_family_code = gr.Textbox(label="Family Code*", placeholder="Enter your family code")
-            login_username = gr.Textbox(label="Username", placeholder="Enter username")
-            login_password = gr.Textbox(label="Password", type="password")
-            login_btn = gr.Button("🚀 Login", variant="primary", size="lg")
-            login_status = gr.Markdown("")
-            gr.Markdown("""### 👥 Demo Family Code: `DEMO2025` | Users: `dad`/`mom`/`sarah`/`tommy` | Password: `demo123`""")
-
-        with gr.Tab("Register"):
-            reg_family_code = gr.Textbox(label="Family Code*", placeholder="Enter your family code")
-            reg_name = gr.Textbox(label="Full Name*")
-            reg_username = gr.Textbox(label="Username*")
-            reg_password = gr.Textbox(label="Password*", type="password")
-            reg_role = gr.Dropdown(label="Family Role*",
-                choices=["Father", "Mother", "Son", "Daughter", "Grandparent", "Other"])
-            reg_avatar = gr.Dropdown(label="Avatar",
-                choices=["👨", "👩", "👧", "👦", "👴", "👵", "🧑", "👶"], value="👤")
-            reg_status = gr.Textbox(label="Status", value="Available")
-            reg_birthday = gr.Textbox(label="Birthday (YYYY-MM-DD)", placeholder="1990-01-01")
-            reg_bio = gr.Textbox(label="Bio", placeholder="Tell us about yourself", lines=2)
-            reg_email = gr.Textbox(label="Email", placeholder="your@email.com")
-            register_btn = gr.Button("📝 Create Account", variant="primary", size="lg")
-            register_status = gr.Markdown("")
-
-        back_to_admin_btn = gr.Button("← Back to Admin/Login Selection", variant="secondary")
-
+    if st.session_state.admin_logged_in:
+        st.markdown("## 👑 Admin Dashboard")
+        st.markdown(get_admin_dashboard_html(), unsafe_allow_html=True)
+        
+        st.markdown("### ➕ Create New Family")
+        with st.form("create_family_form"):
+            new_family_name = st.text_input("Family Name", placeholder="Enter family name")
+            if st.form_submit_button("Create Family"):
+                success, message = create_new_family(new_family_name)
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+        
+        st.markdown("### 🗑️ Delete Family")
+        with st.form("delete_family_form"):
+            delete_family_code = st.text_input("Family Code", placeholder="Enter code to delete")
+            if st.form_submit_button("Delete Family"):
+                success, message = delete_family(delete_family_code)
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+        
+        if st.button("🚪 Logout"):
+            logout()
+            st.experimental_rerun()
+    
+    # User Login/Register
+    elif not st.session_state.logged_in:
+        # Admin Login Section
+        st.markdown("## 👑 Admin Panel")
+        with st.expander("Admin Login"):
+            with st.form("admin_login_form"):
+                admin_username = st.text_input("Admin Username", placeholder="admin")
+                admin_password = st.text_input("Admin Password", type="password")
+                if st.form_submit_button("🔐 Admin Login"):
+                    success, message = admin_login(admin_username, admin_password)
+                    if success:
+                        st.success(message)
+                        st.experimental_rerun()
+                    else:
+                        st.error(message)
+        
+        # User Login/Register Section
+        st.markdown("## 🔐 Family Login or Register")
+        
+        tab1, tab2 = st.tabs(["Login", "Register"])
+        
+        with tab1:
+            with st.form("login_form"):
+                login_family_code = st.text_input("Family Code*", placeholder="Enter your family code")
+                login_username = st.text_input("Username")
+                login_password = st.text_input("Password", type="password")
+                if st.form_submit_button("🚀 Login"):
+                    success, message = login(login_family_code, login_username, login_password)
+                    if success:
+                        st.success(message)
+                        st.experimental_rerun()
+                    else:
+                        st.error(message)
+            
+            st.markdown("""### 👥 Demo Family Code: `DEMO2025` | Users: `dad`/`mom`/`sarah`/`tommy` | Password: `demo123`""")
+        
+        with tab2:
+            with st.form("register_form"):
+                reg_family_code = st.text_input("Family Code*", placeholder="Enter your family code")
+                reg_name = st.text_input("Full Name*")
+                reg_username = st.text_input("Username*")
+                reg_password = st.text_input("Password*", type="password")
+                reg_role = st.selectbox("Family Role*", ["Father", "Mother", "Son", "Daughter", "Grandparent", "Other"])
+                reg_avatar = st.selectbox("Avatar", ["👨", "👩", "👧", "👦", "👴", "👵", "🧑", "👶"], index=7)
+                reg_status = st.text_input("Status", value="Available")
+                reg_birthday = st.text_input("Birthday (YYYY-MM-DD)", placeholder="1990-01-01")
+                reg_bio = st.text_area("Bio", placeholder="Tell us about yourself")
+                reg_email = st.text_input("Email", placeholder="your@email.com")
+                
+                if st.form_submit_button("📝 Create Account"):
+                    success, message = register(reg_family_code, reg_name, reg_username, reg_password, reg_role,
+                                               reg_avatar, reg_status, reg_birthday, reg_bio, reg_email)
+                    if success:
+                        st.success(message)
+                        st.experimental_rerun()
+                    else:
+                        st.error(message)
+    
     # Main App
-    with gr.Column(visible=False) as main_app:
-        with gr.Row():
-            with gr.Column(scale=8):
-                with gr.Tab("🏠 Dashboard"):
-                    dashboard_display = gr.HTML()
-
-                with gr.Tab("📢 Announcements"):
-                    announcement_display = gr.HTML()
-                    with gr.Accordion("✍️ New Announcement", open=False):
-                        announcement_input = gr.Textbox(label="Message", lines=4,
-                            placeholder="Share important updates with the family...")
-                        announcement_priority = gr.Radio(
-                            label="Priority", choices=["normal", "high"], value="normal")
-                        post_btn = gr.Button("📣 Post", variant="primary")
-                        post_status = gr.Markdown("")
-
-                with gr.Tab("💬 Family Chat"):
-                    messages_display = gr.HTML()
-                    with gr.Row():
-                        message_input = gr.Textbox(label="", placeholder="Type message...",
-                            lines=2, scale=5)
-                        send_btn = gr.Button("📤 Send", scale=1, variant="primary")
-
-                with gr.Tab("📅 Events Calendar"):
-                    events_display = gr.HTML()
-                    with gr.Accordion("➕ Add Event", open=False):
-                        event_title = gr.Textbox(label="Event Title*")
-                        with gr.Row():
-                            event_date = gr.Textbox(label="Date (YYYY-MM-DD)*")
-                            event_time = gr.Textbox(label="Time (HH:MM)*")
-                        event_location = gr.Textbox(label="Location")
-                        add_event_btn = gr.Button("📅 Add Event", variant="primary")
-                        event_status = gr.Markdown("")
-
-                with gr.Tab("✅ Family Tasks"):
-                    tasks_display = gr.HTML()
-                    with gr.Accordion("➕ Add Task", open=False):
-                        task_input = gr.Textbox(label="Task Description*")
-                        with gr.Row():
-                            task_assigned = gr.Dropdown(label="Assign To*",
-                                choices=[])
-                            task_due = gr.Textbox(label="Due Date (YYYY-MM-DD)*")
-                        add_task_btn = gr.Button("✅ Add Task", variant="primary")
-                        task_status = gr.Markdown("")
-
-                with gr.Tab("📸 Photo Gallery"):
-                    photos_display = gr.HTML()
-                    with gr.Accordion("📤 Upload Photo", open=False):
-                        photo_upload = gr.Image(type="filepath", label="Select Photo")
-                        photo_caption = gr.Textbox(label="Caption", placeholder="Add a caption...")
-                        upload_photo_btn = gr.Button("📸 Upload", variant="primary")
-                        photo_status = gr.Markdown("")
-
-                with gr.Tab("📊 Polls"):
-                    polls_display = gr.HTML()
-                    with gr.Accordion("➕ Create Poll", open=False):
-                        poll_question = gr.Textbox(label="Question*", placeholder="What should we do this weekend?")
-                        poll_options = gr.Textbox(label="Options (one per line)*",
-                            placeholder="Go to beach\nStay home\nVisit grandparents", lines=4)
-                        create_poll_btn = gr.Button("📊 Create Poll", variant="primary")
-                        poll_status = gr.Markdown("")
-
-                with gr.Tab("⭐ Stories (24h)"):
-                    stories_display = gr.HTML()
-                    with gr.Accordion("➕ Post Story", open=False):
-                        story_content = gr.Textbox(label="Story", placeholder="Share what's happening... (expires in 24h)")
-                        post_story_btn = gr.Button("⭐ Post Story", variant="primary")
-                        story_status = gr.Markdown("")
-
-                with gr.Tab("👤 My Profile"):
-                    gr.Markdown("## 👤 Profile Settings")
-                    profile_pic_upload = gr.Image(type="filepath", label="Upload Profile Picture")
-                    update_pic_btn = gr.Button("📸 Update Profile Picture", variant="primary")
-                    profile_status = gr.Markdown("")
-
-            with gr.Column(scale=3):
-                family_display = gr.HTML()
-
-                gr.Markdown("""
-                ### ✨ Features
-                - 🏠 **Multi-Family**: Each family has unique code
-                - 📢 **Announcements**: Reach everyone instantly
-                - 💬 **Family Chat**: Real-time conversations with reactions
-                - 📅 **Calendar**: Track events & activities
-                - ✅ **Tasks**: Assign & manage chores
-                - 📸 **Photo Gallery**: Share family moments
-                - 📊 **Polls**: Make decisions together
-                - ⭐ **Stories**: 24-hour updates
-                - 🎂 **Birthdays**: Never miss celebrations
-                - 👤 **Profile Pics**: Personalize your account
-                - 🔒 **Secure**: Protected family spaces
-                - 👑 **Admin Panel**: Manage families
-                """)
-
-                logout_btn = gr.Button("🚪 Logout", variant="secondary", size="lg")
-
-    # Admin Event Handlers
-    admin_login_btn.click(
-        admin_login,
-        inputs=[admin_username, admin_password],
-        outputs=[admin_section, admin_dashboard, admin_status, admin_display]
-    )
-
-    user_login_btn.click(
-        lambda: (gr.update(visible=False), gr.update(visible=True)),
-        outputs=[admin_section, login_section]
-    )
-
-    admin_logout_btn.click(
-        lambda: (gr.update(visible=True), gr.update(visible=False), "", ""),
-        outputs=[admin_section, admin_dashboard, admin_status, admin_display]
-    )
-
-    create_family_btn.click(
-        create_new_family,
-        inputs=[new_family_name],
-        outputs=[create_status, admin_display]
-    ).then(lambda: "", outputs=[new_family_name])
-
-    delete_family_btn.click(
-        delete_family,
-        inputs=[delete_family_code],
-        outputs=[delete_status, admin_display]
-    ).then(lambda: "", outputs=[delete_family_code])
-
-    back_to_admin_btn.click(
-        lambda: (gr.update(visible=True), gr.update(visible=False)),
-        outputs=[admin_section, login_section]
-    )
-
-    # User Event Handlers
-    login_btn.click(
-        login,
-        inputs=[login_family_code, login_username, login_password],
-        outputs=[login_section, main_app, login_status, dashboard_display,
-                announcement_display, messages_display, events_display,
-                tasks_display, family_display, photos_display, polls_display, stories_display]
-    )
-
-    register_btn.click(
-        register,
-        inputs=[reg_family_code, reg_name, reg_username, reg_password, reg_role,
-               reg_avatar, reg_status, reg_birthday, reg_bio, reg_email],
-        outputs=[register_status, login_section, main_app, dashboard_display,
-                announcement_display, messages_display, events_display,
-                tasks_display, family_display, photos_display, polls_display, stories_display]
-    )
-
-    logout_btn.click(
-        logout,
-        outputs=[login_section, main_app, login_status, dashboard_display,
-                announcement_display, messages_display, events_display,
-                tasks_display, family_display, photos_display, polls_display, stories_display]
-    )
-
-    post_btn.click(
-        post_announcement,
-        inputs=[announcement_input, announcement_priority],
-        outputs=[post_status, announcement_display]
-    ).then(lambda: ("", "normal"), outputs=[announcement_input, announcement_priority])
-
-    send_btn.click(
-        send_message,
-        inputs=[message_input],
-        outputs=[message_input, messages_display]
-    )
-
-    message_input.submit(
-        send_message,
-        inputs=[message_input],
-        outputs=[message_input, messages_display]
-    )
-
-    add_event_btn.click(
-        add_event,
-        inputs=[event_title, event_date, event_time, event_location],
-        outputs=[event_status, events_display]
-    ).then(lambda: ("", "", "", ""),
-          outputs=[event_title, event_date, event_time, event_location])
-
-    add_task_btn.click(
-        add_task,
-        inputs=[task_input, task_assigned, task_due],
-        outputs=[task_status, tasks_display]
-    ).then(lambda: ("", None, ""), outputs=[task_input, task_assigned, task_due])
-
-    upload_photo_btn.click(
-        upload_photo,
-        inputs=[photo_upload, photo_caption],
-        outputs=[photo_status, photos_display]
-    ).then(lambda: (None, ""), outputs=[photo_upload, photo_caption])
-
-    create_poll_btn.click(
-        create_poll,
-        inputs=[poll_question, poll_options],
-        outputs=[poll_status, polls_display]
-    ).then(lambda: ("", ""), outputs=[poll_question, poll_options])
-
-    post_story_btn.click(
-        post_story,
-        inputs=[story_content],
-        outputs=[story_status, stories_display]
-    ).then(lambda: "", outputs=[story_content])
-
-    update_pic_btn.click(
-        update_profile_picture,
-        inputs=[profile_pic_upload],
-        outputs=[profile_status, family_display]
-    ).then(lambda: None, outputs=[profile_pic_upload])
+    else:
+        # Sidebar for navigation
+        st.sidebar.markdown(f"## 👋 Welcome, {db.current_user}!")
+        st.sidebar.markdown(f"**Family:** {get_current_family_data()['name']}")
+        
+        if st.sidebar.button("🚪 Logout"):
+            logout()
+            st.experimental_rerun()
+        
+        # Main content
+        page = st.sidebar.selectbox("Navigation", [
+            "🏠 Dashboard", "📢 Announcements", "💬 Family Chat", 
+            "📅 Events Calendar", "✅ Family Tasks", "📸 Photo Gallery",
+            "📊 Polls", "⭐ Stories (24h)", "👤 My Profile"
+        ])
+        
+        # Dashboard
+        if page == "🏠 Dashboard":
+            st.markdown(get_dashboard_html(), unsafe_allow_html=True)
+        
+        # Announcements
+        elif page == "📢 Announcements":
+            st.markdown(get_announcements_html(), unsafe_allow_html=True)
+            
+            with st.expander("✍️ New Announcement"):
+                with st.form("announcement_form"):
+                    announcement_input = st.text_area("Message", placeholder="Share important updates with the family...")
+                    announcement_priority = st.radio("Priority", ["normal", "high"])
+                    if st.form_submit_button("📣 Post"):
+                        success, message = post_announcement(announcement_input, announcement_priority)
+                        if success:
+                            st.success(message)
+                            st.experimental_rerun()
+                        else:
+                            st.error(message)
+        
+        # Family Chat
+        elif page == "💬 Family Chat":
+            st.markdown(get_messages_html(), unsafe_allow_html=True)
+            
+            with st.form("message_form"):
+                message_input = st.text_area("Type message...", key="message_input")
+                if st.form_submit_button("📤 Send"):
+                    success, message = send_message(message_input)
+                    if success:
+                        st.experimental_rerun()
+                    else:
+                        st.error(message)
+        
+        # Events Calendar
+        elif page == "📅 Events Calendar":
+            st.markdown(get_events_html(), unsafe_allow_html=True)
+            
+            with st.expander("➕ Add Event"):
+                with st.form("event_form"):
+                    event_title = st.text_input("Event Title*")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        event_date = st.text_input("Date (YYYY-MM-DD)*")
+                    with col2:
+                        event_time = st.text_input("Time (HH:MM)*")
+                    event_location = st.text_input("Location")
+                    if st.form_submit_button("📅 Add Event"):
+                        success, message = add_event(event_title, event_date, event_time, event_location)
+                        if success:
+                            st.success(message)
+                            st.experimental_rerun()
+                        else:
+                            st.error(message)
+        
+        # Family Tasks
+        elif page == "✅ Family Tasks":
+            st.markdown(get_tasks_html(), unsafe_allow_html=True)
+            
+            with st.expander("➕ Add Task"):
+                with st.form("task_form"):
+                    task_input = st.text_input("Task Description*")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        family = get_current_family_data()
+                        if family:
+                            user_names = [user['name'] for user in family['users'].values()]
+                            task_assigned = st.selectbox("Assign To*", user_names)
+                    with col2:
+                        task_due = st.text_input("Due Date (YYYY-MM-DD)*")
+                    if st.form_submit_button("✅ Add Task"):
+                        success, message = add_task(task_input, task_assigned, task_due)
+                        if success:
+                            st.success(message)
+                            st.experimental_rerun()
+                        else:
+                            st.error(message)
+        
+        # Photo Gallery
+        elif page == "📸 Photo Gallery":
+            st.markdown(get_photos_html(), unsafe_allow_html=True)
+            
+            with st.expander("📤 Upload Photo"):
+                with st.form("photo_form"):
+                    photo_upload = st.file_uploader("Select Photo", type=["jpg", "jpeg", "png"])
+                    photo_caption = st.text_input("Caption", placeholder="Add a caption...")
+                    if st.form_submit_button("📸 Upload"):
+                        success, message = upload_photo(photo_upload, photo_caption)
+                        if success:
+                            st.success(message)
+                            st.experimental_rerun()
+                        else:
+                            st.error(message)
+        
+        # Polls
+        elif page == "📊 Polls":
+            st.markdown(get_polls_html(), unsafe_allow_html=True)
+            
+            with st.expander("➕ Create Poll"):
+                with st.form("poll_form"):
+                    poll_question = st.text_input("Question*", placeholder="What should we do this weekend?")
+                    poll_options = st.text_area("Options (one per line)*", 
+                                               placeholder="Go to beach\nStay home\nVisit grandparents")
+                    if st.form_submit_button("📊 Create Poll"):
+                        success, message = create_poll(poll_question, poll_options)
+                        if success:
+                            st.success(message)
+                            st.experimental_rerun()
+                        else:
+                            st.error(message)
+        
+        # Stories
+        elif page == "⭐ Stories (24h)":
+            st.markdown(get_stories_html(), unsafe_allow_html=True)
+            
+            with st.expander("➕ Post Story"):
+                with st.form("story_form"):
+                    story_content = st.text_area("Story", placeholder="Share what's happening... (expires in 24h)")
+                    if st.form_submit_button("⭐ Post Story"):
+                        success, message = post_story(story_content)
+                        if success:
+                            st.success(message)
+                            st.experimental_rerun()
+                        else:
+                            st.error(message)
+        
+        # Profile
+        elif page == "👤 My Profile":
+            st.markdown("## 👤 Profile Settings")
+            
+            with st.expander("📸 Update Profile Picture"):
+                with st.form("profile_pic_form"):
+                    profile_pic_upload = st.file_uploader("Upload Profile Picture", type=["jpg", "jpeg", "png"])
+                    if st.form_submit_button("📸 Update Profile Picture"):
+                        success, message = update_profile_picture(profile_pic_upload)
+                        if success:
+                            st.success(message)
+                            st.experimental_rerun()
+                        else:
+                            st.error(message)
+            
+            # Display family members
+            st.markdown(get_family_members_html(), unsafe_allow_html=True)
+            
+            # Display features
+            st.markdown("""
+            ### ✨ Features
+            - 🏠 **Multi-Family**: Each family has unique code
+            - 📢 **Announcements**: Reach everyone instantly
+            - 💬 **Family Chat**: Real-time conversations with reactions
+            - 📅 **Calendar**: Track events & activities
+            - ✅ **Tasks**: Assign & manage chores
+            - 📸 **Photo Gallery**: Share family moments
+            - 📊 **Polls**: Make decisions together
+            - ⭐ **Stories**: 24-hour updates
+            - 🎂 **Birthdays**: Never miss celebrations
+            - 👤 **Profile Pics**: Personalize your account
+            - 🔒 **Secure**: Protected family spaces
+            - 👑 **Admin Panel**: Manage families
+            """)
 
 if __name__ == "__main__":
-    app.launch(share=True, debug=True)
+    main()
